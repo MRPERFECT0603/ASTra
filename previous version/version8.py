@@ -1,16 +1,12 @@
 import os
-import re
-import numpy as np
 import pandas as pd
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
-from sklearn.cluster import AgglomerativeClustering
-from sklearn.manifold import TSNE
 from sklearn.decomposition import PCA
 import matplotlib.pyplot as plt
-from scipy.cluster.hierarchy import dendrogram, linkage
 from clang import cindex
 import graphviz
+import numpy as np
 
 cindex.Config.set_library_file("/opt/homebrew/opt/llvm/lib/libclang.dylib")
 
@@ -31,7 +27,6 @@ def get_token_kind_name(token_kind):
         cindex.TokenKind.KEYWORD: "KEYWORD",
         cindex.TokenKind.IDENTIFIER: "IDENTIFIER",
         cindex.TokenKind.LITERAL: "LITERAL",
-        cindex.TokenKind.COMMENT: "COMMENT",
     }
     return token_kind_dict.get(token_kind, "UNKNOWN")
 
@@ -72,7 +67,6 @@ def read_and_preprocess_cpp_files_with_ast(directory):
                 # Generate AST using Script 1's function
                 root_cursor = generate_ast(file_path)
                 asts.append(root_cursor)
-
                 # Check if the file is empty after preprocessing
                 if not tokenized_code.strip():
                     print(f"Warning: {file_path} is empty after preprocessing.")
@@ -111,9 +105,10 @@ def compute_tfidf_vectors(cpp_files, asts):
 
 
 # Function to compute similarity matrix for a list of .cpp files
-def compute_similarity_matrix(tfidf_matrix):
+def compute_similarity_matrix(tfidf_matrix, asts):
     similarity_matrix = cosine_similarity(tfidf_matrix)
-    return similarity_matrix
+    ast_similarity_matrix = compute_ast_similarity(asts)
+    return similarity_matrix, ast_similarity_matrix
 
 
 # Function to plot PCA
@@ -130,7 +125,32 @@ def plot_pca(tfidf_matrix, file_names):
     plt.show()
 
 
-# Main function
+def compute_ast_similarity(asts):
+    num_asts = len(asts)
+    ast_similarity_matrix = np.zeros((num_asts, num_asts))
+    for i in range(num_asts):
+        for j in range(num_asts):
+            ast_similarity_matrix[i, j] = myers_diff(str(asts[i]), str(asts[j]))
+    return ast_similarity_matrix
+
+
+def myers_diff(a, b):
+    m, n = len(a), len(b)
+    d = [[0] * (n + 1) for _ in range(m + 1)]
+
+    for i in range(m + 1):
+        d[i][0] = i
+    for j in range(n + 1):
+        d[0][j] = j
+
+    for i in range(1, m + 1):
+        for j in range(1, n + 1):
+            cost = 0 if a[i - 1] == b[j - 1] else 1
+            d[i][j] = min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + cost)
+
+    return d[m][n]
+
+
 def main():
     # Step 1: Read .cpp files and generate ASTs after preprocessing
     cpp_directory = "/Users/vivek/Desktop/ASTra/content/"
@@ -151,27 +171,36 @@ def main():
     tfidf_matrix, vectorizer = compute_tfidf_vectors(cpp_files, asts)
     print("\nTF-IDF matrix shape:", tfidf_matrix.shape)
 
-    # Step 3: Compute similarity matrix
-    similarity_matrix = compute_similarity_matrix(tfidf_matrix)
+    # Step 3: Compute similarity matrices
+    tfidf_similarity_matrix = cosine_similarity(tfidf_matrix)
+    ast_similarity_matrix = compute_ast_similarity(asts)
 
-    # Create a DataFrame for the similarity matrix
-    df_similarity = pd.DataFrame(
-        similarity_matrix, index=file_names, columns=file_names
+    # Combine the similarity matrices
+    combined_similarity_matrix = (tfidf_similarity_matrix + ast_similarity_matrix) / 2
+
+    # Print the combined similarity matrix
+    print("\nCombined Similarity Matrix:")
+    print("==========================")
+    print(combined_similarity_matrix)
+
+    # Create a DataFrame for the combined similarity matrix
+    df_combined_similarity = pd.DataFrame(
+        combined_similarity_matrix, index=file_names, columns=file_names
     )
 
-    # Print formatted similarity matrix
-    print("\nSimilarity Matrix:")
-    print("==================")
-    print(df_similarity)
+    # Print formatted combined similarity matrix
+    print("\nCombined Similarity Matrix:")
+    print("==========================")
+    print(df_combined_similarity)
 
-    # Print pairwise similarity scores
-    print("\nPairwise similarity scores:")
-    print("===========================")
+    # Print pairwise combined similarity scores
+    print("\nPairwise combined similarity scores:")
+    print("================================")
     for i in range(len(file_names)):
         for j in range(i + 1, len(file_names)):
-            similarity_score = similarity_matrix[i, j]
+            combined_similarity_score = combined_similarity_matrix[i, j]
             print(
-                f"Similarity between {file_names[i]} and {file_names[j]}: {similarity_score:.8f}"
+                f"Combined similarity between {file_names[i]} and {file_names[j]}: {combined_similarity_score:.8f}"
             )
 
     # Print AST information for each file
@@ -181,21 +210,14 @@ def main():
         print(f"AST for {file_name}:")
         print("--------------------")
         print(ast)
-    # Print AST information for each file
-    print("\nAST Information:")
-    print("================")
-    for i, (file_name, ast) in enumerate(zip(file_names, asts)):
-        print(f"AST for {file_name}:")
-        print("--------------------")
-        print(ast)
-        # Visualize AST using Graphviz
-        graph = ast_to_graphviz(ast)
-        graph.render(filename=file_name, format="png", cleanup=True)
-        print(f"AST visualization saved as {file_name}.png")
+
+    # Visualize AST using Graphviz
+    # graph = ast_to_graphviz(ast)
+    # graph.render(filename=file_name, format="png", cleanup=True)
+    # print(f"AST visualization saved as {file_name}.png")
 
     # Step 4: Visualize the clusters using PCA
-    plot_pca(tfidf_matrix, file_names)
-
+    # plot_pca(tfidf_matrix, file_names)
 
 if __name__ == "__main__":
     main()
