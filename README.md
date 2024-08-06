@@ -1,4 +1,3 @@
-```markdown
 # ASTra
 
 ## Overview
@@ -37,4 +36,3 @@ In the first part of the code, the program reads C++ files from a specified dire
 ### Part 2: Loading, Preprocessing, and Training the Model
 
 In the second part of the code, the program loads the dataset from the JSON file and preprocesses it for machine learning. The TF-IDF vectors are expanded into separate columns, and the features and labels are separated. The data is then split into training and testing sets. A Random Forest classifier is trained on the training data, and predictions are made on the test set. The model's accuracy and a classification report are printed. Additionally, the code prints the similarity scores along with predictions and actual labels for each pair of files in the test set.
-```
