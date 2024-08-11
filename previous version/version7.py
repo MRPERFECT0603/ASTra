@@ -126,7 +126,7 @@ def plot_pca(tfidf_matrix, file_names):
 # Main function
 def main():
     # Step 1: Read .cpp files and generate ASTs after preprocessing
-    cpp_directory = "/Users/vivek/Desktop/ASTra/content/"
+    cpp_directory = "/Users/vivek/Desktop/ASTra/Data"
     cpp_files, file_names, asts = read_and_preprocess_cpp_files_with_ast(cpp_directory)
     print("Read the following files after preprocessing:")
     for name, content in zip(file_names, cpp_files):

@@ -1,9 +1,11 @@
 import json
 import pandas as pd
-import numpy as np  # Add this import
+import numpy as np
 from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import accuracy_score, classification_report
+import os
+import networkx as nx
 
 # Load the dataset
 def load_dataset(file_path):
@@ -31,10 +33,34 @@ def preprocess_data(dataset):
 
     return X, y, data
 
-# Main function to load, preprocess, and train the model
-def main():
-    dataset_file = "cpp_similarity_dataset.json"
+def build_graph(dataset, threshold):
+    G = nx.Graph()
     
+    for entry in dataset:
+        file1 = entry['file1']
+        file2 = entry['file2']
+        similarity_score = entry['similarity_score']
+        
+        if similarity_score >= threshold:
+            G.add_edge(file1, file2)
+    
+    return G
+
+# Find and print connected components
+def print_connected_components(G):
+    components = list(nx.connected_components(G))
+    
+    for component in components:
+        print("Group of similar files:")
+        print(", ".join(component))
+        print()
+
+
+
+# Main function to load, preprocess, train the model, and save clustered files
+def main():
+    dataset_file = "cpp_similarity_dataset_new.json"
+
     # Load dataset
     dataset = load_dataset(dataset_file)
     
@@ -42,7 +68,7 @@ def main():
     X, y, data = preprocess_data(dataset)
     
     # Split the data into training and testing sets
-    X_train, X_test, y_train, y_test, idx_train, idx_test = train_test_split(X, y, data.index, test_size=0.2, random_state=42)
+    X_train, X_test, y_train, y_test, idx_train, idx_test = train_test_split(X, y, data.index, test_size=0.5, random_state=42)
     
     # Convert idx_test to a Series for iloc usage
     idx_test = pd.Series(idx_test).reset_index(drop=True)
@@ -73,6 +99,11 @@ def main():
     for i in range(len(y_test)):
         idx = idx_test.iloc[i]
         print(f"File 1: {data['file1'].iloc[idx]}, File 2: {data['file2'].iloc[idx]}, Similarity Score: {data['similarity_score'].iloc[idx]}, Predicted: {y_pred.iloc[i]}, Actual: {y_test.iloc[i]}")
+    
+    G = build_graph(dataset, 0.75)
+    
+    # Find and print connected components
+    print_connected_components(G)
 
 if __name__ == "__main__":
     main()
