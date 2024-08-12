@@ -15,10 +15,19 @@ def print_simplified_ast(node, indent=0):
     for child in node.get_children():
         print_simplified_ast(child, indent + 2)
 
-def generate_simplified_ast(file_path):
+def generate_simplified_ast(preprocessed_code):
+    # Create a temporary file with the preprocessed code
+    temp_file_path = "temp.cpp"
+    with open(temp_file_path, 'w') as f:
+        f.write(preprocessed_code)
+
     index = cindex.Index.create()
-    translation_unit = index.parse(file_path)
-    print("Simplified AST for file:", file_path)
+    translation_unit = index.parse(temp_file_path)
+    
+    # Clean up the temporary file
+    os.remove(temp_file_path)
+
+    print("Simplified AST for preprocessed code:")
     print_simplified_ast(translation_unit.cursor)
     return translation_unit.cursor
 
@@ -46,26 +55,34 @@ def average_depth(node, current_depth=0):
         depths.append(average_depth(child, current_depth + 1))
     return sum(depths) / len(depths) if depths else 0
 
-def get_token_kind_name(token_kind):
-    token_kind_dict = {
-        cindex.TokenKind.PUNCTUATION: "PUNCTUATION",
-        cindex.TokenKind.KEYWORD: "KEYWORD",
-        cindex.TokenKind.IDENTIFIER: "IDENTIFIER",
-        cindex.TokenKind.LITERAL: "LITERAL",
-    }
-    return token_kind_dict.get(token_kind, "UNKNOWN")
+def remove_includes(file_path):
+    with open(file_path, 'r') as f:
+        lines = f.readlines()
 
-def tokenize_cpp_code(file_path):
+    # Filter out lines that contain '#include'
+    filtered_lines = [line for line in lines if not line.strip().startswith('#include')]
+
+    # Join the filtered lines back into a single string
+    return ''.join(filtered_lines)
+
+def tokenize_cpp_code(preprocessed_code):
+    # Parse the preprocessed code with Clang
+    temp_file_path = "temp.cpp"
+    with open(temp_file_path, 'w') as f:
+        f.write(preprocessed_code)
+
     index = cindex.Index.create()
-    translation_unit = index.parse(file_path)
+    translation_unit = index.parse(temp_file_path)
     tokens = list(translation_unit.get_tokens(extent=translation_unit.cursor.extent))
 
     filtered_tokens = []
     for token in tokens:
-        token_kind_name = get_token_kind_name(token.kind)
         if token.kind == cindex.TokenKind.COMMENT or token.spelling.startswith("#"):
             continue
         filtered_tokens.append(token.spelling)
+
+    # Clean up the temporary file
+    os.remove(temp_file_path)
 
     return " ".join(filtered_tokens)
 
@@ -77,10 +94,11 @@ def read_and_preprocess_cpp_files_with_ast(directory):
         for file in files:
             if file.endswith(".cpp"):
                 file_path = os.path.join(root, file)
-                tokenized_code = tokenize_cpp_code(file_path)
+                preprocessed_code = remove_includes(file_path)
+                tokenized_code = tokenize_cpp_code(preprocessed_code)
                 cpp_files.append(tokenized_code)
                 file_names.append(file)
-                root_cursor = generate_simplified_ast(file_path)
+                root_cursor = generate_simplified_ast(preprocessed_code)
                 asts.append(root_cursor)
     return cpp_files, file_names, asts
 
@@ -89,12 +107,6 @@ def compute_tfidf_vectors(cpp_files, asts):
     vectorizer = TfidfVectorizer()
     tfidf_matrix = vectorizer.fit_transform(combined_content)
     return tfidf_matrix, vectorizer
-
-def create_distance_matrix(tfidf_matrix):
-    similarity_matrix = cosine_similarity(tfidf_matrix)
-    distance_matrix = 1 - similarity_matrix
-    distance_matrix = np.clip(distance_matrix, 0, 1)
-    return distance_matrix
 
 def create_dataset(cpp_files, file_names, asts, tfidf_matrix):
     dataset = []
@@ -151,7 +163,7 @@ def save_dataset_to_json(dataset, output_file):
         print(f"An unexpected error occurred: {e}")
 
 def main():
-    cpp_directory = "/Users/vivek/Desktop/ASTra/Content1Diff"
+    cpp_directory = "/Users/vivek/Desktop/ASTra/Data/OtherCPP FILES"
     cpp_files, file_names, asts = read_and_preprocess_cpp_files_with_ast(cpp_directory)
     
     if not cpp_files:
@@ -159,7 +171,12 @@ def main():
         return
 
     tfidf_matrix, _ = compute_tfidf_vectors(cpp_files, asts)
-    # Distance matrix is no longer needed
+
+    # Print preprocessed files with their AST
+    for i, file_name in enumerate(file_names):
+        print(f"\nPreprocessed file ({file_name}):\n{cpp_files[i]}")
+        print(f"Simplified AST for {file_name}:")
+        print_simplified_ast(asts[i])
 
     # Create dataset without clustering
     final_dataset = create_dataset(cpp_files, file_names, asts, tfidf_matrix)
